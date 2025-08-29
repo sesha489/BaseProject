@@ -26,7 +26,7 @@ void Selection(int optionSel)
 			cout << "Exit" << endl;
 			break;
 		default:
-			cout<<"Not a valid option. Enter a valid option."<<endl;
+			cout<<"Invalid option. Enter a valid option."<<endl;
 	}
 }
 

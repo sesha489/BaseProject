@@ -10,9 +10,10 @@ void ModClient(){
 	cout << "Modbus client" << endl;
 }
 
-void Selection(int optionSel)
+void Selection()
 {
-	switch(optionSel){
+	cin >> option;
+	switch(option){
 		case 1:
 			system("cls");
 			ModServer();
@@ -26,22 +27,25 @@ void Selection(int optionSel)
 			cout << "Exit" << endl;
 			break;
 		default:
+			system("cls");
+			cout << "Select your modbus application" << endl;
+			cout << "1. Server" << endl;
+			cout << "2. Client" << endl;
+			cout << "3. Exit" << endl;
 			cout<<"Invalid option. Enter a valid option."<<endl;
+			Selection();
 	}
 }
 
 void startScreen(void) {
-	int option;
-	option = 0;
 
 	system("cls");
 	cout << "Select your modbus application" << endl;
 	cout << "1. Server" << endl;
 	cout << "2. Client" << endl;
 	cout << "3. Exit" << endl;
-	cin >> option;
 
-	Selection(option);
+	Selection();
 }
 
 int main() {

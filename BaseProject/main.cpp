@@ -12,7 +12,10 @@ void ModClient(){
 
 void Selection()
 {
+	int option;
+
 	cin >> option;
+
 	switch(option){
 		case 1:
 			system("cls");

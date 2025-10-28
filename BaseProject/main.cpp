@@ -2,12 +2,42 @@
 
 using namespace std;
 
+struct IP {
+	unsigned int ip1;
+	unsigned int ip2;
+	unsigned int ip3;
+	unsigned int ip4;
+};
+
+void ModClConfigScreen()
+{
+	IP MasterIP;
+	IP SubnetIP;
+	unsigned int port;
+}
+
 void ModServer(){
-	cout << "Modbus server" << endl;
+	cout << "Modbus server" << endl << endl;
 }
 
 void ModClient(){
-	cout << "Modbus client" << endl;
+	int sel;
+
+	cout << "Modbus client" << endl << endl;
+	cout << "1. Configuration" << endl;
+	cout << "2. Connect" << endl << endl;
+
+	cin >> sel;
+
+	switch(sel){
+		case 1:
+			system("cls");
+			ModClConfigScreen();
+			break;
+		case 2:
+			system("cls");
+			break;
+	}
 }
 
 void Selection()
@@ -31,10 +61,10 @@ void Selection()
 			break;
 		default:
 			system("cls");
-			cout << "Select your modbus application" << endl;
+			cout << "Select your modbus application" << endl << endl;
 			cout << "1. Server" << endl;
 			cout << "2. Client" << endl;
-			cout << "3. Exit" << endl;
+			cout << "3. Exit" << endl << endl;
 			cout<<"Invalid option. Enter a valid option."<<endl;
 			Selection();
 	}
@@ -43,10 +73,10 @@ void Selection()
 void startScreen(void) {
 
 	system("cls");
-	cout << "Select your modbus application" << endl;
+	cout << "Select your modbus application" << endl << endl;
 	cout << "1. Server" << endl;
 	cout << "2. Client" << endl;
-	cout << "3. Exit" << endl;
+	cout << "3. Exit" << endl << endl;
 
 	Selection();
 }

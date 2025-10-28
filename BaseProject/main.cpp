@@ -25,7 +25,8 @@ void ModClient(){
 
 	cout << "Modbus client" << endl << endl;
 	cout << "1. Configuration" << endl;
-	cout << "2. Connect" << endl << endl;
+	cout << "2. Connect" << endl;
+	cout << "3. Back" << endl;
 
 	cin >> sel;
 
@@ -37,6 +38,13 @@ void ModClient(){
 		case 2:
 			system("cls");
 			break;
+		case 3:
+			system("cls");
+			startScreen();
+			break;
+		default:
+			system("cls");
+			ModClient();
 	}
 }
 

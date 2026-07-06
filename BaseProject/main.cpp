@@ -1,19 +1,40 @@
-#include<iostream>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+#include <iostream>
+#include <stdio.h>
+
+#pragma comment(lib, "Ws2_32.lib")
 
 using namespace std;
 
-struct IP {
-	unsigned int ip1;
-	unsigned int ip2;
-	unsigned int ip3;
-	unsigned int ip4;
-};
-
 void ModClConfigScreen()
 {
-	IP MasterIP;
-	IP SubnetIP;
+	WSADATA wsaData;
+	
+	string IP;
 	unsigned int port;
+
+	cout << "Enter Modbus server IP address: ";
+	cin >> IP;
+	cout << "Enter Modbus server socket. no: ";
+	cin >> port;
+
+	int result = WSAStartup(MAKEWORD(2, 2), &wsaData);
+
+	if (result != 0)
+	{
+		cout << "WSAStartup failed. Error: " << result << endl;
+		return -1;
+	}
+
+	SOCKET sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+
+	sockaddr_in server;
+
+	server.sin_family = AF_INET;
+	server.sin_port = htons(port);
+	InetPton(AF_INET, IP, &server.sin_addr);
 }
 
 void ModServer(){
@@ -91,6 +112,7 @@ void startScreen(void) {
 
 int main() {
 	startScreen();
+	WSACleanup();
 	std::cin.get();
 	return 0;
 }

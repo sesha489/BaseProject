@@ -3,9 +3,14 @@
 #include <windows.h>
 #include <iostream>
 #include <stdio.h>
+#include <thread>
+#include <atomic>
+#include <chrono>
 
-#pragma once;
+//#pragma once ---- This is required only in H file not belongs to CPP
 #pragma comment(lib, "Ws2_32.lib")
+
+std::atomic<bool> running(true);
 
 enum Screen
 {
@@ -24,6 +29,7 @@ struct clientDetails {
 	unsigned int deviceID = 1;
 	unsigned int port = 502;
 
+	SOCKET sock;
 	bool connected = false;
 };
 
@@ -40,6 +46,7 @@ Screen ModClient(void);
 Screen ModCliSetting(clientDetails& Client);
 void EditCliSetting(clientDetails& Client);
 Screen ModCliOper(clientDetails& Client);
+void disconnectPoll(clientDetails& Client);
 void CliOper(clientDetails& Client);
 Screen ModServer(void);
 Screen ModSerSetting(void);
@@ -132,6 +139,7 @@ void EditCliSetting(clientDetails& Client)
 Screen ModCliOper(clientDetails& Client)
 {
 	int sel;
+	running = true;
 
 	system("cls");
 	std::cout << "1. Connect" << std::endl;
@@ -140,9 +148,14 @@ Screen ModCliOper(clientDetails& Client)
 	std::cin >> sel;
 
 	switch (sel) {
-	case 1:
-		CliOper(Client);
+	case 1: {
+		std::thread t1(CliOper, std::ref(Client));
+		std::thread t2(disconnectPoll, std::ref(Client));
+		t1.join();
+		t2.join();
+		//CliOper(Client);
 		return CLIENT_OPERATION;
+	}
 	case 2:
 		return CLIENT;
 	}
@@ -150,13 +163,27 @@ Screen ModCliOper(clientDetails& Client)
 	return CLIENT_OPERATION;
 }
 
+void disconnectPoll(clientDetails& Client) {
+	int sel;
+	while (running) {
+		std::cin >> sel;
+		if (sel == 1) {
+			std::cout << "Disconnected" << std::endl;
+			running = false;
+			return;
+		}
+	}
+}
+
 void CliOper(clientDetails& Client) {
 	system("cls");
-
-	SOCKET sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-	if (sock == INVALID_SOCKET) {
+	
+	Client.sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (Client.sock == INVALID_SOCKET) {
 		std::cout << "Socket creation failed. Error: " << WSAGetLastError() << std::endl;
+		std::cout << "Press 1 to go back" << std::endl;
 		Client.connected = false;
+		running = false;
 		return;
 	}
 	//std::cout << "Socket created" << std::endl;
@@ -166,22 +193,28 @@ void CliOper(clientDetails& Client) {
 	server.sin_port = htons(Client.port);
 	if (InetPtonA(AF_INET, Client.IP.c_str(), &server.sin_addr) != 1) {
 		std::cout << "Invalid IP address format." << std::endl;
+		std::cout << "Press 1 to go back" << std::endl;
 		Client.connected = false;
-		closesocket(sock);
+		closesocket(Client.sock);
+		running = false;
 		return;
 	}
 	//std::cout << "IP address assigned" << std::endl;
 
+	system("cls");
 	std::cout << "Connecting " << Client.IP << ":" << Client.port << "..." << std::endl;
-	int result = connect(sock, reinterpret_cast<sockaddr*>(& server), sizeof(server));
+	int result = connect(Client.sock, reinterpret_cast<sockaddr*>(&server), sizeof(server));
 	if (result == SOCKET_ERROR) {
 		std::cout << "Connection failed. Error: " << WSAGetLastError() << std::endl;
+		std::cout << "Press 1 to go back" << std::endl;
 		Client.connected = false;
-		closesocket(sock);
+		closesocket(Client.sock);
+		running = false;
 		return;
 	}
 	std::cout << "Connected" << std::endl << std::endl;
 	std::cout << "Polling every 1000ms" << std::endl << std::endl;
+	std::cout << "Press 1 to disconnect" << std::endl << std::endl;
 	Client.connected = true;
 
 	uint8_t txBuffer[] =
@@ -204,14 +237,16 @@ void CliOper(clientDetails& Client) {
 	int packetSent = 0;
 	int packetReceived = 0;
 
-	while (Client.connected) {
-		int bytesSent = send(sock, reinterpret_cast<const char*>(txBuffer), sizeof(txBuffer), 0);
+	while (Client.connected && running) {
+		int bytesSent = send(Client.sock, reinterpret_cast<const char*>(txBuffer), sizeof(txBuffer), 0);
 
 		if (bytesSent == SOCKET_ERROR)
 		{
 			std::cout << WSAGetLastError();
+			std::cout << "Press 1 to go back" << std::endl;
 			Client.connected = false;
-			closesocket(sock);
+			closesocket(Client.sock);
+			running = false;
 			return;
 		}
 		else
@@ -220,16 +255,19 @@ void CliOper(clientDetails& Client) {
 			packetSent++;
 		}
 
-		int bytesReceived = recv(sock, reinterpret_cast<char*>(rxBuffer), sizeof(rxBuffer), 0);
+		int bytesReceived = recv(Client.sock, reinterpret_cast<char*>(rxBuffer), sizeof(rxBuffer), 0);
 		if (bytesReceived == SOCKET_ERROR || bytesReceived == 0)
 		{
 			if (bytesReceived == 0)
 				std::cout << "Server disconnected." << std::endl;
-			else
+			else {
 				std::cout << "Receive failed. Error: " << WSAGetLastError() << std::endl;
-			Client.connected = false;
-			closesocket(sock);
-			return;
+				std::cout << "Press 1 to go back" << std::endl;
+				Client.connected = false;
+				closesocket(Client.sock);
+				running = false;
+				return;
+			}
 		}
 		else
 		{
@@ -254,12 +292,19 @@ void CliOper(clientDetails& Client) {
 		std::cout << "Packets Received: " << packetReceived << std::endl;
 		std::cout << "Status : Connected" << std::endl;
 
-		Sleep(1000);
+		//Sleep(1000);
+		std::this_thread::sleep_for(std::chrono::seconds(1));
 		system("cls");
 		std::cout << "Connecting " << Client.IP << ":" << Client.port << "..." << std::endl;
 		std::cout << "Connected" << std::endl << std::endl;
 		std::cout << "Polling every 1000ms" << std::endl << std::endl;
+		std::cout << "Press 1 to disconnect" << std::endl << std::endl;
 	}
+	std::cout << "Disconnected" << std::endl;
+	Client.connected = false;
+	closesocket(Client.sock);
+	running = false;
+	return;
 }
 
 Screen ModServer(void){

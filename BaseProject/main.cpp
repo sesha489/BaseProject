@@ -29,6 +29,10 @@ struct clientDetails {
 	unsigned int deviceID = 1;
 	unsigned int port = 502;
 
+	unsigned int functionCode = 3;
+	unsigned int startingAddress = 0;
+	unsigned int quantity = 2;
+
 	SOCKET sock;
 	bool connected = false;
 };
@@ -42,7 +46,7 @@ struct serverDetails {
 };
 
 Screen StartScreen(void);
-Screen ModClient(void);
+Screen ModClient(clientDetails& Client);
 Screen ModCliSetting(clientDetails& Client);
 void EditCliSetting(clientDetails& Client);
 Screen ModCliOper(clientDetails& Client);
@@ -56,10 +60,13 @@ Screen StartScreen(void) {
 	int option;
 
 	system("cls");
-	std::cout << "Select your modbus application" << std::endl << std::endl;
-	std::cout << "1. Server" << std::endl;
-	std::cout << "2. Client" << std::endl;
+	std::cout << "============================================================" << std::endl;
+	std::cout << "                         MODBUS Tool                        " << std::endl;
+	std::cout << "============================================================" << std::endl << std::endl;
+	std::cout << "1. Modbus Server" << std::endl;
+	std::cout << "2. Modbus Client" << std::endl;
 	std::cout << "3. Exit" << std::endl << std::endl;
+	std::cout << "Select: ";
 
 	std::cin >> option;
 
@@ -75,14 +82,33 @@ Screen StartScreen(void) {
 	return START;
 }
 
-Screen ModClient(void) {
+Screen ModClient(clientDetails& Client) {
 	int sel;
 
 	system("cls");
-	std::cout << "Modbus client" << std::endl << std::endl;
+	std::cout << "============================================================" << std::endl;
+	std::cout << "                       MODBUS Client                        " << std::endl;
+	std::cout << "============================================================" << std::endl;
+	std::cout << "Connection details" << std::endl;
+	std::cout << "IP: " << Client.IP << "     Port: " << Client.port << std::endl;
+	std::cout << "Status: " << (Client.connected ? "Connected" : "Disconnected") << std::endl;
+	std::cout << "------------------------------------------------------------" << std::endl;
+	std::cout << "Parameters" << std::endl;
+	std::cout << "Device ID: " << Client.deviceID << "     Function code: " << Client.functionCode << std::endl;
+	std::cout << "Starting address: " << Client.startingAddress << "     Quantity: " << Client.quantity << std::endl;
+	std::cout << "------------------------------------------------------------" << std::endl;
+	std::cout << "Polling" << std::endl;
+	std::cout << "Polling every 1000ms          Total Count: 0" << std::endl;
+	std::cout << "Success: 0     Failure: 0     Exception: 0" << std::endl;
+	std::cout << "------------------------------------------------------------" << std::endl;
+	std::cout << "Menu" << std::endl;
+	std::cout << "1.Edit Connection  2.Edit Parameters  3.Debug Packet  4.Exit" << std::endl;
+	std::cout << "5. " << (Client.connected ? "Disconnect" : "Connect") << std::endl;
+	std::cout << "------------------------------------------------------------" << std::endl;
 	std::cout << "1. Setting" << std::endl;
 	std::cout << "2. Connect" << std::endl;
 	std::cout << "3. Back" << std::endl << std::endl;
+	std::cout << "------------------------------------------------------------" << std::endl;
 
 	std::cin >> sel;
 
@@ -359,7 +385,7 @@ int main() {
 			current = StartScreen();
 			break;
 		case CLIENT:
-			current = ModClient();
+			current = ModClient(client);
 			break;
 		case CLIENT_SETTING:
 			current = ModCliSetting(client);

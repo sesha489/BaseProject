@@ -6,11 +6,13 @@
 #include <thread>
 #include <atomic>
 #include <chrono>
+#include <vector>
 
 //#pragma once ---- This is required only in H file not belongs to CPP
 #pragma comment(lib, "Ws2_32.lib")
 
 std::atomic<bool> running(true);
+std::atomic<bool> pollingPaused(false);
 
 enum Screen
 {
@@ -31,7 +33,7 @@ struct clientDetails {
 	unsigned int startingAddress = 0;
 	unsigned int quantity = 2;
 
-	SOCKET sock;
+	SOCKET sock = INVALID_SOCKET;
 	bool connected = false;
 };
 
@@ -47,8 +49,10 @@ Screen StartScreen(void);
 void ClientHeader(clientDetails& Client);
 Screen ModClient(clientDetails& Client);
 void EditCliSetting(clientDetails& Client);
+void EditCliParaSetting(clientDetails& Client);
 Screen ModCliOper(clientDetails& Client);
 void disconnectPoll(clientDetails& Client);
+std::vector<uint8_t> buildRequest(const clientDetails& Client);
 void CliOper(clientDetails& Client);
 Screen ModServer(void);
 Screen ModSerOper(void);
@@ -112,6 +116,9 @@ Screen ModClient(clientDetails& Client) {
 	case 1:
 		EditCliSetting(Client);
 		return CLIENT;
+	case 2:
+		EditCliParaSetting(Client);
+		return CLIENT;
 	case 4:
 		return START;
 	case 5:
@@ -132,6 +139,19 @@ void EditCliSetting(clientDetails& Client)
 	std::cin >> Client.port;
 }
 
+void EditCliParaSetting(clientDetails& Client)
+{
+	ClientHeader(Client);
+	std::cout << "Enter Modbus client device ID. no   : ";
+	std::cin >> Client.deviceID;
+	std::cout << "Enter Modbus client function code   : ";
+	std::cin >> Client.functionCode;
+	std::cout << "Enter Modbus client starting address: ";
+	std::cin >> Client.startingAddress;
+	std::cout << "Enter Modbus client quantity        : ";
+	std::cin >> Client.quantity;
+}
+
 Screen ModCliOper(clientDetails& Client)
 {
 	int sel;
@@ -146,14 +166,6 @@ Screen ModCliOper(clientDetails& Client)
 	std::cout << "1.Edit Parameters  2.Debug Packet" << std::endl;
 	std::cout << "3." << (Client.connected ? "Disconnect" : "Connect") << std::endl;
 	std::cout << "------------------------------------------------------------" << std::endl;
-
-	/*switch (sel) {
-	case 1: {
-		return CLIENT;
-	}
-	case 2:
-		return CLIENT;
-	}*/
 
 	if (Client.connected) {
 		return CLIENT_OPERATION;
@@ -171,19 +183,55 @@ void disconnectPoll(clientDetails& Client) {
 			std::cout << "Disconnecting..." << std::endl;
 			Client.connected = false;
 			closesocket(Client.sock);
+			Client.sock = INVALID_SOCKET;
 			running = false;
 			return;
+		}
+		if (sel == 1) {
+			pollingPaused = true;
+			EditCliParaSetting(Client);
+			pollingPaused = false;
 		}
 	}
 }
 
+std::vector<uint8_t> buildRequest(const clientDetails& Client)
+{
+	uint16_t transactionID = 1;
+
+	std::vector<uint8_t> txBuffer =
+	{
+		static_cast<uint8_t>(transactionID >> 8),
+		static_cast<uint8_t>(transactionID & 0xFF),
+
+		0x00,
+		0x00,
+
+		0x00,
+		0x06,
+
+		static_cast<uint8_t>(Client.deviceID),
+
+		static_cast<uint8_t>(Client.functionCode),
+
+		static_cast<uint8_t>(Client.startingAddress >> 8),
+		static_cast<uint8_t>(Client.startingAddress & 0xFF),
+
+		static_cast<uint8_t>(Client.quantity >> 8),
+		static_cast<uint8_t>(Client.quantity & 0xFF)
+	};
+
+	return txBuffer;
+}
+
 void CliOper(clientDetails& Client) {
-	
+
 	Client.sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (Client.sock == INVALID_SOCKET) {
 		std::cout << "Socket creation failed. Error: " << WSAGetLastError() << std::endl;
 		std::cout << "Press 3 to go back" << std::endl;
 		Client.connected = false;
+		Client.sock = INVALID_SOCKET;
 		running = false;
 		return;
 	}
@@ -197,6 +245,7 @@ void CliOper(clientDetails& Client) {
 		std::cout << "Press 3 to go back" << std::endl;
 		Client.connected = false;
 		closesocket(Client.sock);
+		Client.sock = INVALID_SOCKET;
 		running = false;
 		return;
 	}
@@ -209,6 +258,7 @@ void CliOper(clientDetails& Client) {
 		std::cout << "Press 3 to go back" << std::endl;
 		Client.connected = false;
 		closesocket(Client.sock);
+		Client.sock = INVALID_SOCKET;
 		running = false;
 		return;
 	}
@@ -220,28 +270,19 @@ void CliOper(clientDetails& Client) {
 	std::cout << "3." << (Client.connected ? "Disconnect" : "Connect") << std::endl;
 	std::cout << "------------------------------------------------------------" << std::endl;
 
-	uint8_t txBuffer[] =
-	{
-		0x00,0x01,     // Transaction ID
-
-		0x00,0x00,     // Protocol ID
-
-		0x00,0x06,     // Length
-
-		0x01,          // Unit ID
-
-		0x03,          // Function Code
-
-		0x00,0x63,     // Starting Address
-
-		0x00,0x02      // Quantity
-	};
+	std::vector<uint8_t> txBuffer = buildRequest(Client);
 	uint8_t rxBuffer[25];
 	int packetSent = 0;
 	int packetReceived = 0;
 
 	while (Client.connected && running) {
-		int bytesSent = send(Client.sock, reinterpret_cast<const char*>(txBuffer), sizeof(txBuffer), 0);
+		while (pollingPaused)
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		}
+
+		txBuffer = buildRequest(Client);
+		int bytesSent = send(Client.sock, reinterpret_cast<const char*>(txBuffer.data()), txBuffer.size(), 0);
 
 		if (bytesSent == SOCKET_ERROR)
 		{
@@ -249,6 +290,7 @@ void CliOper(clientDetails& Client) {
 			std::cout << "Press 3 to go back" << std::endl;
 			Client.connected = false;
 			closesocket(Client.sock);
+			Client.sock = INVALID_SOCKET;
 			running = false;
 			return;
 		}
@@ -268,6 +310,7 @@ void CliOper(clientDetails& Client) {
 				std::cout << "Press 3 to go back" << std::endl;
 				Client.connected = false;
 				closesocket(Client.sock);
+				Client.sock = INVALID_SOCKET;
 				running = false;
 				return;
 			}
@@ -279,7 +322,7 @@ void CliOper(clientDetails& Client) {
 		}
 
 		std::cout << std::endl << "Transmitted bytes" << std::endl;
-		for (int i = 0; i < sizeof(txBuffer); i++)
+		for (int i = 0; i < txBuffer.size(); i++)
 		{
 			printf("%02X ", txBuffer[i]);
 		}
@@ -296,6 +339,7 @@ void CliOper(clientDetails& Client) {
 
 		//Sleep(1000);
 		std::this_thread::sleep_for(std::chrono::seconds(1));
+		std::cout << "POLLING RESUMED\n";  //-----------------------------Print overwrite issue check
 		ClientHeader(Client);
 		std::cout << "Menu" << std::endl;
 		std::cout << "1.Edit Parameters  2.Debug Packet" << std::endl;
@@ -304,11 +348,12 @@ void CliOper(clientDetails& Client) {
 	}
 	Client.connected = false;
 	closesocket(Client.sock);
+	Client.sock = INVALID_SOCKET;
 	running = false;
 	return;
 }
 
-Screen ModServer(void){
+Screen ModServer(void) {
 	int sel;
 
 	system("cls");

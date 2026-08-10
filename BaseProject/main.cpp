@@ -16,10 +16,8 @@ enum Screen
 {
 	START,
 	CLIENT,
-	CLIENT_SETTING,
 	CLIENT_OPERATION,
 	SERVER,
-	SERVER_SETTING,
 	SERVER_OPERATION,
 	EXIT
 };
@@ -46,14 +44,13 @@ struct serverDetails {
 };
 
 Screen StartScreen(void);
+void ClientHeader(clientDetails& Client);
 Screen ModClient(clientDetails& Client);
-Screen ModCliSetting(clientDetails& Client);
 void EditCliSetting(clientDetails& Client);
 Screen ModCliOper(clientDetails& Client);
 void disconnectPoll(clientDetails& Client);
 void CliOper(clientDetails& Client);
 Screen ModServer(void);
-Screen ModSerSetting(void);
 Screen ModSerOper(void);
 
 Screen StartScreen(void) {
@@ -67,7 +64,6 @@ Screen StartScreen(void) {
 	std::cout << "2. Modbus Client" << std::endl;
 	std::cout << "3. Exit" << std::endl << std::endl;
 	std::cout << "Select: ";
-
 	std::cin >> option;
 
 	switch (option) {
@@ -82,9 +78,7 @@ Screen StartScreen(void) {
 	return START;
 }
 
-Screen ModClient(clientDetails& Client) {
-	int sel;
-
+void ClientHeader(clientDetails& Client) {
 	system("cls");
 	std::cout << "============================================================" << std::endl;
 	std::cout << "                       MODBUS Client                        " << std::endl;
@@ -101,64 +95,40 @@ Screen ModClient(clientDetails& Client) {
 	std::cout << "Polling every 1000ms          Total Count: 0" << std::endl;
 	std::cout << "Success: 0     Failure: 0     Exception: 0" << std::endl;
 	std::cout << "------------------------------------------------------------" << std::endl;
-	std::cout << "Menu" << std::endl;
-	std::cout << "1.Edit Connection  2.Edit Parameters  3.Debug Packet  4.Exit" << std::endl;
-	std::cout << "5. " << (Client.connected ? "Disconnect" : "Connect") << std::endl;
-	std::cout << "------------------------------------------------------------" << std::endl;
-	std::cout << "1. Setting" << std::endl;
-	std::cout << "2. Connect" << std::endl;
-	std::cout << "3. Back" << std::endl << std::endl;
-	std::cout << "------------------------------------------------------------" << std::endl;
-
-	std::cin >> sel;
-
-	switch (sel) {
-	case 1:
-		return CLIENT_SETTING;
-	case 2:
-		return CLIENT_OPERATION;
-	case 3:
-		return START;
-	}
-
-	return CLIENT;
 }
 
-Screen ModCliSetting(clientDetails& Client)
-{
+Screen ModClient(clientDetails& Client) {
 	int sel;
 
-	system("cls");
-	std::cout << "Enter Modbus client IP address: " << Client.IP << std::endl;
-	std::cout << "Enter Modbus client device ID. no: " << Client.deviceID << std::endl;
-	std::cout << "Enter Modbus client socket. no: " << Client.port << std::endl << std::endl;
-
-	std::cout << "1. Edit setting" << std::endl;
-	std::cout << "2. Connect" << std::endl;
-	std::cout << "3. Back" << std::endl << std::endl;
-
+	ClientHeader(Client);
+	std::cout << "Menu" << std::endl;
+	std::cout << "1.Edit Connection  2.Edit Parameters  3.Debug Packet  4.Exit" << std::endl;
+	std::cout << "5." << (Client.connected ? "Disconnect" : "Connect") << std::endl;
+	std::cout << "------------------------------------------------------------" << std::endl;
+	std::cout << "Select: ";
 	std::cin >> sel;
 
 	switch (sel) {
 	case 1:
 		EditCliSetting(Client);
-		return CLIENT_SETTING;
-	case 2:
-		return CLIENT_OPERATION;
-	case 3:
 		return CLIENT;
+	case 4:
+		return START;
+	case 5:
+		return CLIENT_OPERATION;
 	}
 
-	return CLIENT_SETTING;
+	return CLIENT;
 }
 
 void EditCliSetting(clientDetails& Client)
 {
-	std::cout << "Enter Modbus client IP address: ";
+	ClientHeader(Client);
+	std::cout << "Enter Modbus client IP address   : ";
 	std::cin >> Client.IP;
 	std::cout << "Enter Modbus client device ID. no: ";
 	std::cin >> Client.deviceID;
-	std::cout << "Enter Modbus client socket. no: ";
+	std::cout << "Enter Modbus client port         : ";
 	std::cin >> Client.port;
 }
 
@@ -167,34 +137,40 @@ Screen ModCliOper(clientDetails& Client)
 	int sel;
 	running = true;
 
-	system("cls");
-	std::cout << "1. Connect" << std::endl;
-	std::cout << "2. Back" << std::endl;
+	std::thread t1(CliOper, std::ref(Client));
+	std::thread t2(disconnectPoll, std::ref(Client));
+	t1.join();
+	t2.join();
+	ClientHeader(Client);
+	std::cout << "Menu" << std::endl;
+	std::cout << "1.Edit Parameters  2.Debug Packet" << std::endl;
+	std::cout << "3." << (Client.connected ? "Disconnect" : "Connect") << std::endl;
+	std::cout << "------------------------------------------------------------" << std::endl;
 
-	std::cin >> sel;
-
-	switch (sel) {
+	/*switch (sel) {
 	case 1: {
-		std::thread t1(CliOper, std::ref(Client));
-		std::thread t2(disconnectPoll, std::ref(Client));
-		t1.join();
-		t2.join();
-		//CliOper(Client);
-		return CLIENT_OPERATION;
+		return CLIENT;
 	}
 	case 2:
 		return CLIENT;
-	}
+	}*/
 
-	return CLIENT_OPERATION;
+	if (Client.connected) {
+		return CLIENT_OPERATION;
+	}
+	else {
+		return CLIENT;
+	}
 }
 
 void disconnectPoll(clientDetails& Client) {
 	int sel;
 	while (running) {
 		std::cin >> sel;
-		if (sel == 1) {
-			std::cout << "Disconnected" << std::endl;
+		if (sel == 3) {
+			std::cout << "Disconnecting..." << std::endl;
+			Client.connected = false;
+			closesocket(Client.sock);
 			running = false;
 			return;
 		}
@@ -202,12 +178,11 @@ void disconnectPoll(clientDetails& Client) {
 }
 
 void CliOper(clientDetails& Client) {
-	system("cls");
 	
 	Client.sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (Client.sock == INVALID_SOCKET) {
 		std::cout << "Socket creation failed. Error: " << WSAGetLastError() << std::endl;
-		std::cout << "Press 1 to go back" << std::endl;
+		std::cout << "Press 3 to go back" << std::endl;
 		Client.connected = false;
 		running = false;
 		return;
@@ -219,7 +194,7 @@ void CliOper(clientDetails& Client) {
 	server.sin_port = htons(Client.port);
 	if (InetPtonA(AF_INET, Client.IP.c_str(), &server.sin_addr) != 1) {
 		std::cout << "Invalid IP address format." << std::endl;
-		std::cout << "Press 1 to go back" << std::endl;
+		std::cout << "Press 3 to go back" << std::endl;
 		Client.connected = false;
 		closesocket(Client.sock);
 		running = false;
@@ -227,21 +202,23 @@ void CliOper(clientDetails& Client) {
 	}
 	//std::cout << "IP address assigned" << std::endl;
 
-	system("cls");
 	std::cout << "Connecting " << Client.IP << ":" << Client.port << "..." << std::endl;
 	int result = connect(Client.sock, reinterpret_cast<sockaddr*>(&server), sizeof(server));
 	if (result == SOCKET_ERROR) {
 		std::cout << "Connection failed. Error: " << WSAGetLastError() << std::endl;
-		std::cout << "Press 1 to go back" << std::endl;
+		std::cout << "Press 3 to go back" << std::endl;
 		Client.connected = false;
 		closesocket(Client.sock);
 		running = false;
 		return;
 	}
-	std::cout << "Connected" << std::endl << std::endl;
-	std::cout << "Polling every 1000ms" << std::endl << std::endl;
-	std::cout << "Press 1 to disconnect" << std::endl << std::endl;
 	Client.connected = true;
+
+	ClientHeader(Client);
+	std::cout << "Menu" << std::endl;
+	std::cout << "1.Edit Parameters  2.Debug Packet" << std::endl;
+	std::cout << "3." << (Client.connected ? "Disconnect" : "Connect") << std::endl;
+	std::cout << "------------------------------------------------------------" << std::endl;
 
 	uint8_t txBuffer[] =
 	{
@@ -269,7 +246,7 @@ void CliOper(clientDetails& Client) {
 		if (bytesSent == SOCKET_ERROR)
 		{
 			std::cout << WSAGetLastError();
-			std::cout << "Press 1 to go back" << std::endl;
+			std::cout << "Press 3 to go back" << std::endl;
 			Client.connected = false;
 			closesocket(Client.sock);
 			running = false;
@@ -288,7 +265,7 @@ void CliOper(clientDetails& Client) {
 				std::cout << "Server disconnected." << std::endl;
 			else {
 				std::cout << "Receive failed. Error: " << WSAGetLastError() << std::endl;
-				std::cout << "Press 1 to go back" << std::endl;
+				std::cout << "Press 3 to go back" << std::endl;
 				Client.connected = false;
 				closesocket(Client.sock);
 				running = false;
@@ -316,17 +293,15 @@ void CliOper(clientDetails& Client) {
 
 		std::cout << "Packets Sent: " << packetSent << std::endl;
 		std::cout << "Packets Received: " << packetReceived << std::endl;
-		std::cout << "Status : Connected" << std::endl;
 
 		//Sleep(1000);
 		std::this_thread::sleep_for(std::chrono::seconds(1));
-		system("cls");
-		std::cout << "Connecting " << Client.IP << ":" << Client.port << "..." << std::endl;
-		std::cout << "Connected" << std::endl << std::endl;
-		std::cout << "Polling every 1000ms" << std::endl << std::endl;
-		std::cout << "Press 1 to disconnect" << std::endl << std::endl;
+		ClientHeader(Client);
+		std::cout << "Menu" << std::endl;
+		std::cout << "1.Edit Parameters  2.Debug Packet" << std::endl;
+		std::cout << "3." << (Client.connected ? "Disconnect" : "Connect") << std::endl;
+		std::cout << "------------------------------------------------------------" << std::endl;
 	}
-	std::cout << "Disconnected" << std::endl;
 	Client.connected = false;
 	closesocket(Client.sock);
 	running = false;
@@ -346,17 +321,13 @@ Screen ModServer(void){
 
 	switch (sel) {
 	case 1:
-		return SERVER_SETTING;
+		return SERVER;
 	case 2:
 		return SERVER_OPERATION;
 	case 3:
 		return START;
 	}
 
-	return SERVER;
-}
-
-Screen ModSerSetting(void) {
 	return SERVER;
 }
 
@@ -387,17 +358,11 @@ int main() {
 		case CLIENT:
 			current = ModClient(client);
 			break;
-		case CLIENT_SETTING:
-			current = ModCliSetting(client);
-			break;
 		case CLIENT_OPERATION:
 			current = ModCliOper(client);
 			break;
 		case SERVER:
 			current = ModServer();
-			break;
-		case SERVER_SETTING:
-			current = ModSerSetting();
 			break;
 		case SERVER_OPERATION:
 			current = ModSerOper();

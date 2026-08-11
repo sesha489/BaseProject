@@ -7,12 +7,14 @@
 #include <atomic>
 #include <chrono>
 #include <vector>
+#include <iomanip>
 
 //#pragma once ---- This is required only in H file not belongs to CPP
 #pragma comment(lib, "Ws2_32.lib")
 
 std::atomic<bool> running(true);
 std::atomic<bool> pollingPaused(false);
+bool debugMode = false;
 
 enum Screen
 {
@@ -25,13 +27,13 @@ enum Screen
 };
 
 struct clientDetails {
-	std::string IP = "192.168.1.10";
+	std::string IP = "127.0.0.1";
 	unsigned int deviceID = 1;
 	unsigned int port = 502;
 
 	unsigned int functionCode = 3;
-	unsigned int startingAddress = 0;
-	unsigned int quantity = 2;
+	unsigned int startingAddress = 99;
+	unsigned int quantity = 4;
 
 	SOCKET sock = INVALID_SOCKET;
 	bool connected = false;
@@ -45,6 +47,8 @@ struct serverDetails {
 	bool connected = false;
 };
 
+std::vector<uint8_t> rxBuffer;
+
 Screen StartScreen(void);
 void ClientHeader(clientDetails& Client);
 Screen ModClient(clientDetails& Client);
@@ -53,6 +57,7 @@ void EditCliParaSetting(clientDetails& Client);
 Screen ModCliOper(clientDetails& Client);
 void disconnectPoll(clientDetails& Client);
 std::vector<uint8_t> buildRequest(const clientDetails& Client);
+void PrintRxBuffer(clientDetails& Client);
 void CliOper(clientDetails& Client);
 Screen ModServer(void);
 Screen ModSerOper(void);
@@ -187,6 +192,9 @@ void disconnectPoll(clientDetails& Client) {
 			running = false;
 			return;
 		}
+		if (sel == 2) {
+			debugMode = !debugMode;
+		}
 		if (sel == 1) {
 			pollingPaused = true;
 			EditCliParaSetting(Client);
@@ -222,6 +230,38 @@ std::vector<uint8_t> buildRequest(const clientDetails& Client)
 	};
 
 	return txBuffer;
+}
+
+void PrintRxBuffer(clientDetails& Client)
+{
+	int transactionID = (rxBuffer[0] << 8) | rxBuffer[1];
+	int protocolID = (rxBuffer[2] << 8) | rxBuffer[3];
+	int length = (rxBuffer[4] << 8) | rxBuffer[5];
+	int deviceID = rxBuffer[6];
+	int functionCode = rxBuffer[7];
+	int byteCount = rxBuffer[8];
+
+	uint16_t* data = new uint16_t[byteCount / 2];
+	uint16_t* address = new uint16_t[byteCount / 2];
+
+	std::cout << "Transaction ID: " << transactionID << "    Protocol ID  : " << protocolID   << "    Length    : " << length << std::endl;
+	std::cout << "Device ID     : " << deviceID      << "    Function Code: " << functionCode << "    Byte count: " << byteCount << std::endl;
+	
+	for (int i = 0; i < (byteCount / 2); i++)
+	{
+		data[i] = (rxBuffer[9 + (i * 2)] << 8) | rxBuffer[10 + (i * 2)];
+		address[i] = Client.startingAddress + i;
+		if (Client.functionCode == 3) {
+			address[i] = address[i] + 40000;
+		}
+		else if (Client.functionCode == 4) {
+			address[i] = address[i] + 30000;
+		}
+		else if (Client.functionCode == 2) {
+			address[i] = address[i] + 10000;
+		}
+		std::cout << address[i] << ": " << data[i] << std::endl;
+	};
 }
 
 void CliOper(clientDetails& Client) {
@@ -271,7 +311,7 @@ void CliOper(clientDetails& Client) {
 	std::cout << "------------------------------------------------------------" << std::endl;
 
 	std::vector<uint8_t> txBuffer = buildRequest(Client);
-	uint8_t rxBuffer[25];
+	uint8_t buffer[1024];
 	int packetSent = 0;
 	int packetReceived = 0;
 
@@ -300,7 +340,7 @@ void CliOper(clientDetails& Client) {
 			packetSent++;
 		}
 
-		int bytesReceived = recv(Client.sock, reinterpret_cast<char*>(rxBuffer), sizeof(rxBuffer), 0);
+		int bytesReceived = recv(Client.sock, reinterpret_cast<char*>(buffer), sizeof(buffer), 0);
 		if (bytesReceived == SOCKET_ERROR || bytesReceived == 0)
 		{
 			if (bytesReceived == 0)
@@ -318,28 +358,40 @@ void CliOper(clientDetails& Client) {
 		else
 		{
 			std::cout << bytesReceived << " bytes received" << std::endl;
+			/*rxBuffer.insert(
+				rxBuffer.end(),
+				reinterpret_cast<uint8_t*>(buffer),
+				reinterpret_cast<uint8_t*>(buffer) + bytesReceived
+			);*/
+			rxBuffer.assign(buffer, buffer + bytesReceived);
 			packetReceived++;
 		}
 
-		std::cout << std::endl << "Transmitted bytes" << std::endl;
-		for (int i = 0; i < txBuffer.size(); i++)
-		{
-			printf("%02X ", txBuffer[i]);
+		if (debugMode) {
+			std::cout << std::endl << "Transmitted bytes: ";
+			for (int i = 0; i < txBuffer.size(); i++)
+			{
+				printf("%02X ", txBuffer[i]);
+			}
+			printf("\n");
+			std::cout << "Received bytes: ";
+			for (int i = 0; i < bytesReceived; i++)
+			{
+				printf("%02X ", rxBuffer[i]);
+			}
+			printf("\n\n");
 		}
-		printf("\n");
-		std::cout << "Received bytes" << std::endl;
-		for (int i = 0; i < bytesReceived; i++)
-		{
-			printf("%02X ", rxBuffer[i]);
+		else {
+			PrintRxBuffer(Client);
 		}
-		printf("\n\n");
 
 		std::cout << "Packets Sent: " << packetSent << std::endl;
 		std::cout << "Packets Received: " << packetReceived << std::endl;
 
 		//Sleep(1000);
 		std::this_thread::sleep_for(std::chrono::seconds(1));
-		std::cout << "POLLING RESUMED\n";  //-----------------------------Print overwrite issue check
+		if (pollingPaused)
+			continue;
 		ClientHeader(Client);
 		std::cout << "Menu" << std::endl;
 		std::cout << "1.Edit Parameters  2.Debug Packet" << std::endl;

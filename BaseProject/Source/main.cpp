@@ -1,8 +1,5 @@
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <windows.h>
-#include <iostream>
-#include <stdio.h>
+#include "ModbusTCP.h"
+
 #include <thread>
 #include <atomic>
 #include <chrono>
